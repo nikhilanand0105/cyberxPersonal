@@ -70,7 +70,7 @@ public class ActivityScreenController {
         layout.addView(title);
 
         TextView sub = new TextView(activity);
-        sub.setText("Chronological telemetry and forensic timeline stored locally on-device");
+        sub.setText("Chronological forensic telemetry and threat interceptions stored locally on-device");
         sub.setTextSize(13);
         sub.setTextColor(0xFF666666);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
@@ -147,10 +147,10 @@ public class ActivityScreenController {
         containerChips.removeAllViews();
 
         containerChips.addView(createFilterChip("ALL", null));
-        containerChips.addView(createFilterChip("APK THREATS", ActivityEvent.EventCategory.APK));
-        containerChips.addView(createFilterChip("SENSE AI", ActivityEvent.EventCategory.SENSE));
-        containerChips.addView(createFilterChip("PHISHING LINKS", ActivityEvent.EventCategory.PHISHING));
-        containerChips.addView(createFilterChip("DNS FIREWALL", ActivityEvent.EventCategory.FIREWALL));
+        containerChips.addView(createFilterChip("MESSAGES", ActivityEvent.EventCategory.SENSE));
+        containerChips.addView(createFilterChip("LINKS", ActivityEvent.EventCategory.PHISHING));
+        containerChips.addView(createFilterChip("FILES / APKS", ActivityEvent.EventCategory.APK));
+        containerChips.addView(createFilterChip("DEVICE", ActivityEvent.EventCategory.FIREWALL));
     }
 
     private Button createFilterChip(String label, ActivityEvent.EventCategory category) {
@@ -185,6 +185,7 @@ public class ActivityScreenController {
 
     public void render() {
         containerEventsList.removeAllViews();
+        boolean senior = AppState.get().isSeniorMode();
         List<ActivityEvent> allEvents = AppState.get().getActivityEvents();
         List<ActivityEvent> filtered = new ArrayList<>();
 
@@ -209,12 +210,12 @@ public class ActivityScreenController {
         } else {
             tvEmptyState.setVisibility(View.GONE);
             for (ActivityEvent ev : filtered) {
-                containerEventsList.addView(createEventCard(ev));
+                containerEventsList.addView(createEventCard(ev, senior));
             }
         }
     }
 
-    private View createEventCard(ActivityEvent ev) {
+    private View createEventCard(ActivityEvent ev, boolean senior) {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackgroundResource(R.drawable.bg_card_cred);
@@ -233,8 +234,8 @@ public class ActivityScreenController {
         topRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView tvCategory = new TextView(activity);
-        tvCategory.setText(ev.getCategory().getDisplayName());
-        tvCategory.setTextSize(10);
+        tvCategory.setText(ev.getCategory().getDisplayName().toUpperCase());
+        tvCategory.setTextSize(senior ? 12 : 10);
         tvCategory.setTextColor(0xFF141414);
         tvCategory.setBackgroundResource(R.drawable.bg_pill_dark);
         tvCategory.setPadding((int) (8 * density), (int) (3 * density), (int) (8 * density), (int) (3 * density));
@@ -248,7 +249,7 @@ public class ActivityScreenController {
         svp.leftMargin = (int) (6 * density);
         tvSeverity.setLayoutParams(svp);
         tvSeverity.setText(ev.getSeverity().name());
-        tvSeverity.setTextSize(10);
+        tvSeverity.setTextSize(senior ? 12 : 10);
         tvSeverity.setPadding((int) (8 * density), (int) (3 * density), (int) (8 * density), (int) (3 * density));
 
         if (ev.getSeverity() == ThreatSeverity.CRITICAL) {
@@ -269,7 +270,7 @@ public class ActivityScreenController {
         TextView tvTime = new TextView(activity);
         SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a", Locale.getDefault());
         tvTime.setText(sdf.format(ev.getTimestamp()));
-        tvTime.setTextSize(11);
+        tvTime.setTextSize(senior ? 12 : 11);
         tvTime.setTextColor(0xFF888888);
         topRow.addView(tvTime);
 
@@ -278,7 +279,7 @@ public class ActivityScreenController {
         // Title
         TextView tvTitle = new TextView(activity);
         tvTitle.setText(ev.getTitle());
-        tvTitle.setTextSize(15);
+        tvTitle.setTextSize(senior ? 17 : 15);
         tvTitle.setTextColor(0xFF141414);
         tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
@@ -292,7 +293,7 @@ public class ActivityScreenController {
         // Summary
         TextView tvSum = new TextView(activity);
         tvSum.setText(ev.getSummary());
-        tvSum.setTextSize(12);
+        tvSum.setTextSize(senior ? 14 : 12);
         tvSum.setTextColor(0xFF666666);
         tvSum.setLineSpacing(0, 1.2f);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
@@ -306,7 +307,7 @@ public class ActivityScreenController {
         // Remediation Link
         TextView tvAction = new TextView(activity);
         tvAction.setText(ev.getActionLabel() + " →");
-        tvAction.setTextSize(12);
+        tvAction.setTextSize(senior ? 14 : 12);
         tvAction.setTextColor(0xFF141414);
         tvAction.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(

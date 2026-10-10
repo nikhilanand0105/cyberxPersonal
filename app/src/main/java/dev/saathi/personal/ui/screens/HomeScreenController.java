@@ -13,40 +13,24 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import dev.saathi.ai.HindiExplanationSynthesizer;
-import dev.saathi.engine.ApkInstallHandoffHelper;
-import dev.saathi.model.ApkAnalysisReport;
-import dev.saathi.model.ScanVerdict;
 import dev.saathi.model.ThreatSeverity;
 import dev.saathi.personal.R;
+import dev.saathi.personal.ui.MainActivity;
 import dev.saathi.personal.ui.components.DetailSheetDialog;
 import dev.saathi.personal.ui.model.ActivityEvent;
 import dev.saathi.personal.ui.model.ChildProfile;
 import dev.saathi.personal.ui.model.NavigationTab;
+import dev.saathi.personal.ui.model.ScanMode;
 import dev.saathi.personal.ui.state.AppState;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 public class HomeScreenController {
 
     private final Activity activity;
     private final float density;
     private ScrollView rootView;
-
-    private TextView tvProfileName;
-    private TextView tvScoreNumber;
-    private TextView tvScoreLabel;
-    private TextView tvScoreSub;
-    private LinearLayout cardApkShield;
-    private TextView tvApkStatus;
-    private TextView tvSenseStatus;
-    private LinearLayout containerRecentAlerts;
+    private LinearLayout contentLayout;
 
     public HomeScreenController(Activity activity) {
         this.activity = activity;
@@ -67,30 +51,40 @@ public class HomeScreenController {
         rootView.setFillViewport(true);
         rootView.setBackgroundColor(0xFFF7F7F5);
 
-        LinearLayout layout = new LinearLayout(activity);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding((int) (20 * density), (int) (16 * density), (int) (20 * density), (int) (100 * density));
+        contentLayout = new LinearLayout(activity);
+        contentLayout.setOrientation(LinearLayout.VERTICAL);
+        contentLayout.setPadding((int) (20 * density), (int) (16 * density), (int) (20 * density), (int) (100 * density));
+        rootView.addView(contentLayout);
 
-        // 1. Top Header: Profile selector & Hardware status
-        layout.addView(buildTopHeader());
-
-        // 2. CRED Hero Score Meter Card
-        layout.addView(buildHeroScoreCard());
-
-        // 3. Four-Vector Defense Matrix Cards
-        layout.addView(buildDefenseMatrixSection());
-
-        // 4. Quick Action Dock
-        layout.addView(buildQuickActionDock());
-
-        // 5. Recent Alerts & Activity Preview
-        layout.addView(buildRecentAlertsSection());
-
-        rootView.addView(layout);
         render();
     }
 
-    private View buildTopHeader() {
+    public void render() {
+        contentLayout.removeAllViews();
+        boolean senior = AppState.get().isSeniorMode();
+
+        // 1. Header (Device & Profile)
+        contentLayout.addView(buildTopHeader(senior));
+
+        // 2. Senior Mode Quick Advice Banner (if senior mode active)
+        if (senior) {
+            contentLayout.addView(buildSeniorRecoveryBanner());
+        }
+
+        // 3. Hero Protection Score & Truthful Status
+        contentLayout.addView(buildHeroProtectionCard(senior));
+
+        // 4. Quick Safety Actions (4 Entry Points into Scan Hub)
+        contentLayout.addView(buildQuickActionsSection(senior));
+
+        // 5. Emergency Helpline & Family Assistance Dock
+        contentLayout.addView(buildHelplineDock(senior));
+
+        // 6. Recent Findings & Detail Sheet Triggers
+        contentLayout.addView(buildRecentFindingsSection(senior));
+    }
+
+    private View buildTopHeader(boolean senior) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -98,10 +92,10 @@ public class HomeScreenController {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        params.bottomMargin = (int) (18 * density);
+        params.bottomMargin = (int) (16 * density);
         row.setLayoutParams(params);
 
-        // Profile Pill Selector (Tappable)
+        // Profile Pill Selector
         LinearLayout profilePill = new LinearLayout(activity);
         profilePill.setOrientation(LinearLayout.HORIZONTAL);
         profilePill.setGravity(Gravity.CENTER_VERTICAL);
@@ -110,13 +104,13 @@ public class HomeScreenController {
         profilePill.setOnClickListener(v -> showProfilePickerDialog());
 
         TextView iconUser = new TextView(activity);
-        iconUser.setText("🛡️ ");
-        iconUser.setTextSize(14);
+        iconUser.setText(senior ? "👴 " : "🛡️ ");
+        iconUser.setTextSize(senior ? 16 : 14);
         profilePill.addView(iconUser);
 
-        tvProfileName = new TextView(activity);
-        tvProfileName.setText(AppState.get().getCurrentProfile().getName());
-        tvProfileName.setTextSize(13);
+        TextView tvProfileName = new TextView(activity);
+        tvProfileName.setText(senior ? "Senior Mode" : AppState.get().getCurrentProfile().getName());
+        tvProfileName.setTextSize(senior ? 15 : 13);
         tvProfileName.setTextColor(0xFF141414);
         tvProfileName.setTypeface(null, android.graphics.Typeface.BOLD);
         profilePill.addView(tvProfileName);
@@ -129,16 +123,16 @@ public class HomeScreenController {
 
         row.addView(profilePill);
 
-        // Space
+        // Flexible Space
         View space = new View(activity);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, 1, 1f);
         space.setLayoutParams(sp);
         row.addView(space);
 
-        // 144Hz Badge
+        // Device & Refresh Rate Badge
         TextView tvHwBadge = new TextView(activity);
-        tvHwBadge.setText("144Hz • Snapdragon 8 Elite");
-        tvHwBadge.setTextSize(11);
+        tvHwBadge.setText("iQOO 15 • Snapdragon 8 Elite");
+        tvHwBadge.setTextSize(senior ? 12 : 11);
         tvHwBadge.setTextColor(0xFF386B57);
         tvHwBadge.setBackgroundResource(R.drawable.bg_pill_emerald);
         tvHwBadge.setPadding((int) (10 * density), (int) (6 * density), (int) (10 * density), (int) (6 * density));
@@ -147,231 +141,273 @@ public class HomeScreenController {
         return row;
     }
 
-    private View buildHeroScoreCard() {
-        LinearLayout card = new LinearLayout(activity);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card_cred);
-        card.setPadding((int) (22 * density), (int) (22 * density), (int) (22 * density), (int) (22 * density));
+    private View buildSeniorRecoveryBanner() {
+        LinearLayout banner = new LinearLayout(activity);
+        banner.setOrientation(LinearLayout.VERTICAL);
+        banner.setBackgroundResource(R.drawable.bg_card_glow_amber);
+        banner.setPadding((int) (18 * density), (int) (16 * density), (int) (18 * density), (int) (16 * density));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        params.bottomMargin = (int) (20 * density);
+        params.bottomMargin = (int) (16 * density);
+        banner.setLayoutParams(params);
+
+        TextView title = new TextView(activity);
+        title.setText("⚠️ SUSPICIOUS CALL OR MESSAGE? WHAT TO DO NOW");
+        title.setTextSize(14);
+        title.setTextColor(0xFF855A12);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        banner.addView(title);
+
+        TextView step1 = new TextView(activity);
+        step1.setText("1. NEVER share any 4 or 6-digit SMS OTP with anyone, even if they claim to be a bank manager or police.");
+        step1.setTextSize(14);
+        step1.setTextColor(0xFF141414);
+        step1.setLineSpacing(0, 1.2f);
+        LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p1.topMargin = (int) (8 * density);
+        step1.setLayoutParams(p1);
+        banner.addView(step1);
+
+        TextView step2 = new TextView(activity);
+        step2.setText("2. DO NOT install AnyDesk, TeamViewer, or quick support apps sent via WhatsApp links.");
+        step2.setTextSize(14);
+        step2.setTextColor(0xFF141414);
+        step2.setLineSpacing(0, 1.2f);
+        LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p2.topMargin = (int) (6 * density);
+        step2.setLayoutParams(p2);
+        banner.addView(step2);
+
+        TextView step3 = new TextView(activity);
+        step3.setText("3. If money was deducted, immediately call National Cyber Helpline at 1930 to freeze the transaction.");
+        step3.setTextSize(14);
+        step3.setTextColor(0xFF141414);
+        step3.setLineSpacing(0, 1.2f);
+        LinearLayout.LayoutParams p3 = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p3.topMargin = (int) (6 * density);
+        step3.setLayoutParams(p3);
+        banner.addView(step3);
+
+        Button btnDial1930 = new Button(activity);
+        btnDial1930.setText("📞 Call 1930 Helpline Immediately");
+        btnDial1930.setBackgroundResource(R.drawable.bg_pill_black);
+        btnDial1930.setTextColor(0xFFFFFFFF);
+        btnDial1930.setTextSize(14);
+        btnDial1930.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (48 * density));
+        bp.topMargin = (int) (12 * density);
+        btnDial1930.setLayoutParams(bp);
+        btnDial1930.setOnClickListener(v -> dialHelpline());
+        banner.addView(btnDial1930);
+
+        return banner;
+    }
+
+    private View buildHeroProtectionCard(boolean senior) {
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card_cred);
+        card.setPadding((int) (22 * density), (int) (20 * density), (int) (22 * density), (int) (20 * density));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.bottomMargin = (int) (18 * density);
         card.setLayoutParams(params);
 
         TextView label = new TextView(activity);
-        label.setText("CYBER DEFENSE SCORE");
-        label.setTextSize(11);
+        label.setText("OVERALL DIGITAL PROTECTION POSTURE");
+        label.setTextSize(senior ? 13 : 11);
         label.setTextColor(0xFF888888);
         label.setTypeface(null, android.graphics.Typeface.BOLD);
         card.addView(label);
 
-        LinearLayout scoreRow = new LinearLayout(activity);
-        scoreRow.setOrientation(LinearLayout.HORIZONTAL);
-        scoreRow.setGravity(Gravity.BOTTOM);
-        LinearLayout.LayoutParams srParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        srParams.topMargin = (int) (8 * density);
-        scoreRow.setLayoutParams(srParams);
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rp.topMargin = (int) (12 * density);
+        row.setLayoutParams(rp);
 
-        tvScoreNumber = new TextView(activity);
-        tvScoreNumber.setText(String.valueOf(AppState.get().getSafetyScore()));
-        tvScoreNumber.setTextSize(48);
-        tvScoreNumber.setTextColor(0xFF141414);
-        tvScoreNumber.setTypeface(null, android.graphics.Typeface.BOLD);
-        scoreRow.addView(tvScoreNumber);
+        TextView tvScore = new TextView(activity);
+        tvScore.setText(String.valueOf(AppState.get().getSafetyScore()));
+        tvScore.setTextSize(senior ? 48 : 42);
+        tvScore.setTextColor(0xFF141414);
+        tvScore.setTypeface(null, android.graphics.Typeface.BOLD);
+        row.addView(tvScore);
 
-        TextView tvScale = new TextView(activity);
-        tvScale.setText(" / 100");
-        tvScale.setTextSize(20);
-        tvScale.setTextColor(0xFF888888);
-        LinearLayout.LayoutParams scParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        scParams.bottomMargin = (int) (8 * density);
-        scParams.leftMargin = (int) (4 * density);
-        tvScale.setLayoutParams(scParams);
-        scoreRow.addView(tvScale);
+        LinearLayout textCol = new LinearLayout(activity);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tcp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tcp.leftMargin = (int) (18 * density);
+        textCol.setLayoutParams(tcp);
 
-        card.addView(scoreRow);
+        TextView tvStatus = new TextView(activity);
+        tvStatus.setText("PROTECTED & OPTIMAL");
+        tvStatus.setTextSize(senior ? 16 : 14);
+        tvStatus.setTextColor(0xFF386B57);
+        tvStatus.setTypeface(null, android.graphics.Typeface.BOLD);
+        textCol.addView(tvStatus);
 
-        tvScoreLabel = new TextView(activity);
-        tvScoreLabel.setText("OPTIMAL • ALL SECURITY VECTORS SECURED");
-        tvScoreLabel.setTextSize(13);
-        tvScoreLabel.setTextColor(0xFF386B57);
-        tvScoreLabel.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams slParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        slParams.topMargin = (int) (6 * density);
-        tvScoreLabel.setLayoutParams(slParams);
-        card.addView(tvScoreLabel);
+        TextView tvSub = new TextView(activity);
+        tvSub.setText(senior
+                ? "Your phone is protected against scam apps, fake payment links and OTP stealers."
+                : "Snapdragon 8 Elite on-device intelligence active. Zero unreviewed critical threats.");
+        tvSub.setTextSize(senior ? 14 : 12);
+        tvSub.setTextColor(0xFF666666);
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        sp.topMargin = (int) (4 * density);
+        tvSub.setLayoutParams(sp);
+        textCol.addView(tvSub);
 
-        tvScoreSub = new TextView(activity);
-        tvScoreSub.setText("Zero unverified sideloads • Child secrecy guardian armed • NPU isolated");
-        tvScoreSub.setTextSize(12);
-        tvScoreSub.setTextColor(0xFF666666);
-        LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        subParams.topMargin = (int) (4 * density);
-        tvScoreSub.setLayoutParams(subParams);
-        card.addView(tvScoreSub);
+        row.addView(textCol);
+        card.addView(row);
+
+        // Divider
+        View divider = new View(activity);
+        divider.setBackgroundColor(0xFFE5E5E2);
+        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * density));
+        dp.topMargin = (int) (16 * density);
+        dp.bottomMargin = (int) (14 * density);
+        divider.setLayoutParams(dp);
+        card.addView(divider);
+
+        // Status bullets
+        LinearLayout footerRow = new LinearLayout(activity);
+        footerRow.setOrientation(LinearLayout.HORIZONTAL);
+        footerRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView dot = new TextView(activity);
+        dot.setText("● ");
+        dot.setTextColor(0xFF386B57);
+        dot.setTextSize(12);
+        footerRow.addView(dot);
+
+        TextView footerText = new TextView(activity);
+        footerText.setText("Last scan: Active • Local analysis • No cloud exfiltration");
+        footerText.setTextSize(senior ? 13 : 11);
+        footerText.setTextColor(0xFF666666);
+        footerRow.addView(footerText);
+
+        card.addView(footerRow);
 
         return card;
     }
 
-    private View buildDefenseMatrixSection() {
-        LinearLayout container = new LinearLayout(activity);
-        container.setOrientation(LinearLayout.VERTICAL);
+    private View buildQuickActionsSection(boolean senior) {
+        LinearLayout section = new LinearLayout(activity);
+        section.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         params.bottomMargin = (int) (20 * density);
-        container.setLayoutParams(params);
+        section.setLayoutParams(params);
 
-        TextView sectionTitle = new TextView(activity);
-        sectionTitle.setText("ACTIVE DEFENSE MATRIX");
-        sectionTitle.setTextSize(12);
-        sectionTitle.setTextColor(0xFF888888);
-        sectionTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        sectionTitle.setPadding(0, 0, 0, (int) (10 * density));
-        container.addView(sectionTitle);
+        TextView sectionLabel = new TextView(activity);
+        sectionLabel.setText("QUICK SAFETY ACTIONS");
+        sectionLabel.setTextSize(senior ? 14 : 11);
+        sectionLabel.setTextColor(0xFF888888);
+        sectionLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.bottomMargin = (int) (12 * density);
+        sectionLabel.setLayoutParams(slp);
+        section.addView(sectionLabel);
 
-        // Grid Row 1: APK Shield & Sense Guardian
+        // Row 1: Message Check & Link Check
         LinearLayout row1 = new LinearLayout(activity);
         row1.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams r1Params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        r1Params.bottomMargin = (int) (10 * density);
-        row1.setLayoutParams(r1Params);
+        LinearLayout.LayoutParams r1p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        r1p.bottomMargin = (int) (10 * density);
+        row1.setLayoutParams(r1p);
 
-        // Vector 1: APK Shield
-        cardApkShield = createMatrixCard(
-                "🛡️ APK SHIELD",
-                "Reverse Engineering",
-                "ARM64 Offline Scanner",
-                0xFF386B57,
-                R.drawable.bg_card_cred,
-                v -> AppState.get().setCurrentTab(NavigationTab.INSIGHTS)
-        );
-        LinearLayout.LayoutParams c1Params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        c1Params.rightMargin = (int) (6 * density);
-        cardApkShield.setLayoutParams(c1Params);
-        row1.addView(cardApkShield);
+        row1.addView(createActionCard("💬 Message Check",
+                senior ? "Check SMS, WhatsApp message or OTP request" : "Evaluate SMS, WhatsApp OTP & payment coercion",
+                senior,
+                () -> AppState.get().navigateToScan(ScanMode.MESSAGE_CHECK)));
 
-        // Vector 2: Sense Guardian
-        LinearLayout cardSense = createMatrixCard(
-                "👁️ SENSE AI",
-                "Child Online Safety",
-                "Grooming & Secrecy Cues",
-                0xFF141414,
-                R.drawable.bg_card_cred,
-                v -> AppState.get().setCurrentTab(NavigationTab.INSIGHTS)
-        );
-        LinearLayout.LayoutParams c2Params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        c2Params.leftMargin = (int) (6 * density);
-        cardSense.setLayoutParams(c2Params);
-        row1.addView(cardSense);
+        View gap1 = new View(activity);
+        gap1.setLayoutParams(new LinearLayout.LayoutParams((int) (10 * density), 1));
+        row1.addView(gap1);
 
-        container.addView(row1);
+        row1.addView(createActionCard("🔗 Link Check",
+                senior ? "Verify suspicious web address or banking link" : "Analyze URLs, punycode lookalikes & phishing kits",
+                senior,
+                () -> AppState.get().navigateToScan(ScanMode.LINK_CHECK)));
 
-        // Grid Row 2: Local DNS Firewall & 1930 Helpline
+        section.addView(row1);
+
+        // Row 2: APK Sideload & Installed Apps
         LinearLayout row2 = new LinearLayout(activity);
         row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+        LinearLayout.LayoutParams r2p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        row2.setLayoutParams(r2p);
 
-        // Vector 3: Local DNS Firewall
-        LinearLayout cardFirewall = createMatrixCard(
-                "🌐 LOCAL FIREWALL",
-                "Traffic Guard",
-                "0 Cloud Relays • DNS Shield",
-                0xFF141414,
-                R.drawable.bg_card_cred,
-                v -> AppState.get().setCurrentTab(NavigationTab.INSIGHTS)
-        );
-        LinearLayout.LayoutParams c3Params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        c3Params.rightMargin = (int) (6 * density);
-        cardFirewall.setLayoutParams(c3Params);
-        row2.addView(cardFirewall);
+        row2.addView(createActionCard("📦 APK / File Check",
+                senior ? "Inspect downloaded app file before installing" : "Reverse-engineer package manifest & DEX hooks",
+                senior,
+                () -> AppState.get().navigateToScan(ScanMode.APK_CHECK)));
 
-        // Vector 4: 1930 Helpline & SOS
-        LinearLayout cardHelpline = createMatrixCard(
-                "🚨 HELPLINE 1930",
-                "National Response",
-                "Instant Fraud Freeze",
-                0xFF855A12,
-                R.drawable.bg_card_glow_amber,
-                v -> dial1930()
-        );
-        LinearLayout.LayoutParams c4Params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        c4Params.leftMargin = (int) (6 * density);
-        cardHelpline.setLayoutParams(c4Params);
-        row2.addView(cardHelpline);
+        View gap2 = new View(activity);
+        gap2.setLayoutParams(new LinearLayout.LayoutParams((int) (10 * density), 1));
+        row2.addView(gap2);
 
-        container.addView(row2);
+        row2.addView(createActionCard("⚙️ Installed Apps",
+                senior ? "Review apps with permission to control phone" : "Audit Accessibility, SMS & Admin permissions",
+                senior,
+                () -> AppState.get().navigateToScan(ScanMode.INSTALLED_APPS)));
 
-        return container;
+        section.addView(row2);
+
+        return section;
     }
 
-    private LinearLayout createMatrixCard(String tag, String title, String subtitle, int accentColor, int bgRes, View.OnClickListener click) {
+    private View createActionCard(String title, String desc, boolean senior, Runnable onClick) {
         LinearLayout card = new LinearLayout(activity);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(bgRes);
-        card.setPadding((int) (14 * density), (int) (14 * density), (int) (14 * density), (int) (14 * density));
-        card.setOnClickListener(click);
-
-        TextView tvTag = new TextView(activity);
-        tvTag.setText(tag);
-        tvTag.setTextSize(10);
-        tvTag.setTextColor(accentColor);
-        tvTag.setTypeface(null, android.graphics.Typeface.BOLD);
-        card.addView(tvTag);
+        card.setBackgroundResource(R.drawable.bg_card_interactive);
+        card.setPadding((int) (16 * density), (int) (16 * density), (int) (16 * density), (int) (16 * density));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        card.setLayoutParams(params);
+        card.setOnClickListener(v -> onClick.run());
 
         TextView tvTitle = new TextView(activity);
         tvTitle.setText(title);
-        tvTitle.setTextSize(14);
+        tvTitle.setTextSize(senior ? 16 : 14);
         tvTitle.setTextColor(0xFF141414);
         tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        tp.topMargin = (int) (4 * density);
-        tvTitle.setLayoutParams(tp);
         card.addView(tvTitle);
 
-        TextView tvSub = new TextView(activity);
-        tvSub.setText(subtitle);
-        tvSub.setTextSize(11);
-        tvSub.setTextColor(0xFF666666);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        sp.topMargin = (int) (2 * density);
-        tvSub.setLayoutParams(sp);
-        card.addView(tvSub);
+        TextView tvDesc = new TextView(activity);
+        tvDesc.setText(desc);
+        tvDesc.setTextSize(senior ? 13 : 11);
+        tvDesc.setTextColor(0xFF666666);
+        tvDesc.setLineSpacing(0, 1.2f);
+        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dp.topMargin = (int) (6 * density);
+        tvDesc.setLayoutParams(dp);
+        card.addView(tvDesc);
+
+        TextView tvTap = new TextView(activity);
+        tvTap.setText("Launch Scan →");
+        tvTap.setTextSize(senior ? 13 : 11);
+        tvTap.setTextColor(0xFF141414);
+        tvTap.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tp.topMargin = (int) (10 * density);
+        tvTap.setLayoutParams(tp);
+        card.addView(tvTap);
 
         return card;
     }
 
-    private View buildQuickActionDock() {
+    private View buildHelplineDock(boolean senior) {
         LinearLayout dock = new LinearLayout(activity);
         dock.setOrientation(LinearLayout.VERTICAL);
         dock.setBackgroundResource(R.drawable.bg_card_cred);
-        dock.setPadding((int) (18 * density), (int) (18 * density), (int) (18 * density), (int) (18 * density));
+        dock.setPadding((int) (18 * density), (int) (16 * density), (int) (18 * density), (int) (16 * density));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -379,112 +415,84 @@ public class HomeScreenController {
         params.bottomMargin = (int) (20 * density);
         dock.setLayoutParams(params);
 
-        TextView title = new TextView(activity);
-        title.setText("ON-DEVICE TESTING SUITE (IQOO 15)");
-        title.setTextSize(11);
-        title.setTextColor(0xFF141414);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        dock.addView(title);
+        TextView label = new TextView(activity);
+        label.setText("NEED HELP OR SUSPECT FRAUD?");
+        label.setTextSize(senior ? 13 : 11);
+        label.setTextColor(0xFF888888);
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
+        dock.addView(label);
 
-        TextView desc = new TextView(activity);
-        desc.setText("Execute real live security tests directly on Qualcomm Snapdragon 8 Elite:");
-        desc.setTextSize(12);
-        desc.setTextColor(0xFF666666);
-        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        dp.topMargin = (int) (4 * density);
-        dp.bottomMargin = (int) (12 * density);
-        desc.setLayoutParams(dp);
-        dock.addView(desc);
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rp.topMargin = (int) (10 * density);
+        row.setLayoutParams(rp);
 
-        // Test buttons row 1
-        LinearLayout btnRow1 = new LinearLayout(activity);
-        btnRow1.setOrientation(LinearLayout.HORIZONTAL);
+        // Button 1: Ask Assistant
+        Button btnCopilot = new Button(activity);
+        btnCopilot.setText("💬 Ask Assistant");
+        btnCopilot.setBackgroundResource(R.drawable.bg_pill_black);
+        btnCopilot.setTextColor(0xFFFFFFFF);
+        btnCopilot.setTextSize(senior ? 14 : 12);
+        btnCopilot.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams bp1 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
+        bp1.rightMargin = (int) (6 * density);
+        btnCopilot.setLayoutParams(bp1);
+        btnCopilot.setOnClickListener(v -> {
+            if (activity instanceof MainActivity) {
+                ((MainActivity) activity).openContextualAssistant("I need help understanding a suspicious security alert on my device.");
+            }
+        });
+        row.addView(btnCopilot);
 
-        Button btnTrojan = new Button(activity);
-        btnTrojan.setText("⚡ Test Trojan APK");
-        btnTrojan.setTextSize(12);
-        btnTrojan.setTextColor(0xFFA63232);
-        btnTrojan.setBackgroundResource(R.drawable.bg_pill_crimson);
-        btnTrojan.setOnClickListener(v -> testSyntheticApk(true));
-        LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
-        p1.rightMargin = (int) (6 * density);
-        btnTrojan.setLayoutParams(p1);
-        btnRow1.addView(btnTrojan);
+        // Button 2: Call 1930
+        Button btnCall = new Button(activity);
+        btnCall.setText("📞 Dial 1930");
+        btnCall.setBackgroundResource(R.drawable.bg_pill_crimson);
+        btnCall.setTextColor(0xFFA63232);
+        btnCall.setTextSize(senior ? 14 : 12);
+        btnCall.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams bp2 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
+        bp2.leftMargin = (int) (6 * density);
+        btnCall.setLayoutParams(bp2);
+        btnCall.setOnClickListener(v -> dialHelpline());
+        row.addView(btnCall);
 
-        Button btnClean = new Button(activity);
-        btnClean.setText("🛡️ Test Clean APK");
-        btnClean.setTextSize(12);
-        btnClean.setTextColor(0xFF386B57);
-        btnClean.setBackgroundResource(R.drawable.bg_pill_emerald);
-        btnClean.setOnClickListener(v -> testSyntheticApk(false));
-        LinearLayout.LayoutParams p2 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
-        p2.leftMargin = (int) (6 * density);
-        btnClean.setLayoutParams(p2);
-        btnRow1.addView(btnClean);
-
-        dock.addView(btnRow1);
-
-        // Test buttons row 2: Phishing & SOS
-        LinearLayout btnRow2 = new LinearLayout(activity);
-        btnRow2.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams r2p = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        r2p.topMargin = (int) (10 * density);
-        btnRow2.setLayoutParams(r2p);
-
-        Button btnPhish = new Button(activity);
-        btnPhish.setText("🌐 Test Phishing Link");
-        btnPhish.setTextSize(12);
-        btnPhish.setTextColor(0xFF141414);
-        btnPhish.setBackgroundResource(R.drawable.bg_pill_dark);
-        btnPhish.setOnClickListener(v -> testPhishingLink());
-        LinearLayout.LayoutParams p3 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
-        p3.rightMargin = (int) (6 * density);
-        btnPhish.setLayoutParams(p3);
-        btnRow2.addView(btnPhish);
-
-        Button btnSos = new Button(activity);
-        btnSos.setText("📞 Call 1930 Helpline");
-        btnSos.setTextSize(12);
-        btnSos.setTextColor(0xFF855A12);
-        btnSos.setBackgroundResource(R.drawable.bg_pill_amber);
-        btnSos.setOnClickListener(v -> dial1930());
-        LinearLayout.LayoutParams p4 = new LinearLayout.LayoutParams(0, (int) (44 * density), 1f);
-        p4.leftMargin = (int) (6 * density);
-        btnSos.setLayoutParams(p4);
-        btnRow2.addView(btnSos);
-
-        dock.addView(btnRow2);
-
+        dock.addView(row);
         return dock;
     }
 
-    private View buildRecentAlertsSection() {
+    private View buildRecentFindingsSection(boolean senior) {
         LinearLayout section = new LinearLayout(activity);
         section.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        section.setLayoutParams(params);
 
         LinearLayout headerRow = new LinearLayout(activity);
         headerRow.setOrientation(LinearLayout.HORIZONTAL);
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
-        headerRow.setPadding(0, 0, 0, (int) (10 * density));
+        LinearLayout.LayoutParams hrp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hrp.bottomMargin = (int) (12 * density);
+        headerRow.setLayoutParams(hrp);
 
-        TextView title = new TextView(activity);
-        title.setText("RECENT SECURITY TIMELINE");
-        title.setTextSize(12);
-        title.setTextColor(0xFF888888);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        title.setLayoutParams(tp);
-        headerRow.addView(title);
+        TextView label = new TextView(activity);
+        label.setText("RECENT SECURITY FINDINGS");
+        label.setTextSize(senior ? 14 : 11);
+        label.setTextColor(0xFF888888);
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
+        headerRow.addView(label);
+
+        View sp = new View(activity);
+        sp.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        headerRow.addView(sp);
 
         TextView tvViewAll = new TextView(activity);
-        tvViewAll.setText("View All (4) →");
-        tvViewAll.setTextSize(12);
+        tvViewAll.setText("View All (Activity) →");
+        tvViewAll.setTextSize(senior ? 13 : 11);
         tvViewAll.setTextColor(0xFF141414);
         tvViewAll.setTypeface(null, android.graphics.Typeface.BOLD);
         tvViewAll.setOnClickListener(v -> AppState.get().setCurrentTab(NavigationTab.ACTIVITY));
@@ -492,227 +500,112 @@ public class HomeScreenController {
 
         section.addView(headerRow);
 
-        containerRecentAlerts = new LinearLayout(activity);
-        containerRecentAlerts.setOrientation(LinearLayout.VERTICAL);
-        section.addView(containerRecentAlerts);
+        // List top 3 recent events
+        List<ActivityEvent> events = AppState.get().getActivityEvents();
+        int count = Math.min(events.size(), 3);
+        for (int i = 0; i < count; i++) {
+            ActivityEvent event = events.get(i);
+            section.addView(createEventCard(event, senior));
+        }
 
         return section;
     }
 
-    public void render() {
-        ChildProfile profile = AppState.get().getCurrentProfile();
-        tvProfileName.setText(profile.getName());
-        tvScoreNumber.setText(String.valueOf(AppState.get().getSafetyScore()));
-
-        // Populate top 2 recent alerts
-        containerRecentAlerts.removeAllViews();
-        List<ActivityEvent> events = AppState.get().getActivityEvents();
-        int count = Math.min(2, events.size());
-        for (int i = 0; i < count; i++) {
-            ActivityEvent ev = events.get(i);
-            containerRecentAlerts.addView(createAlertItemView(ev));
-        }
-    }
-
-    private View createAlertItemView(ActivityEvent ev) {
-        LinearLayout item = new LinearLayout(activity);
-        item.setOrientation(LinearLayout.VERTICAL);
-        item.setBackgroundResource(R.drawable.bg_card_cred);
-        item.setPadding((int) (16 * density), (int) (14 * density), (int) (16 * density), (int) (14 * density));
+    private View createEventCard(ActivityEvent event, boolean senior) {
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card_interactive);
+        card.setPadding((int) (16 * density), (int) (14 * density), (int) (16 * density), (int) (14 * density));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         );
         params.bottomMargin = (int) (10 * density);
-        item.setLayoutParams(params);
-        item.setOnClickListener(v -> DetailSheetDialog.showEventDetails(activity, ev));
+        card.setLayoutParams(params);
+        card.setOnClickListener(v -> DetailSheetDialog.showEventDetails(activity, event));
 
-        LinearLayout top = new LinearLayout(activity);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout topRow = new LinearLayout(activity);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView badge = new TextView(activity);
-        badge.setText(ev.getCategory().getDisplayName());
-        badge.setTextSize(10);
-        badge.setTextColor(ev.getSeverity() == ThreatSeverity.CRITICAL ? 0xFFA63232 : 0xFF141414);
-        badge.setBackgroundResource(ev.getSeverity() == ThreatSeverity.CRITICAL ? R.drawable.bg_pill_crimson : R.drawable.bg_pill_dark);
-        badge.setPadding((int) (8 * density), (int) (2 * density), (int) (8 * density), (int) (2 * density));
-        top.addView(badge);
+        TextView tvCategory = new TextView(activity);
+        tvCategory.setText(event.getCategory().getDisplayName().toUpperCase());
+        tvCategory.setTextSize(senior ? 12 : 10);
+        tvCategory.setTextColor(0xFF888888);
+        tvCategory.setTypeface(null, android.graphics.Typeface.BOLD);
+        topRow.addView(tvCategory);
 
-        View space = new View(activity);
-        top.addView(space, new LinearLayout.LayoutParams(0, 1, 1f));
+        View sp = new View(activity);
+        sp.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1f));
+        topRow.addView(sp);
 
-        TextView time = new TextView(activity);
-        time.setText("Just now");
-        time.setTextSize(11);
-        time.setTextColor(0xFF888888);
-        top.addView(time);
+        TextView tvSeverity = new TextView(activity);
+        tvSeverity.setText(event.getSeverity().name());
+        tvSeverity.setTextSize(senior ? 12 : 10);
+        tvSeverity.setTypeface(null, android.graphics.Typeface.BOLD);
+        tvSeverity.setPadding((int) (8 * density), (int) (3 * density), (int) (8 * density), (int) (3 * density));
 
-        item.addView(top);
+        if (event.getSeverity() == ThreatSeverity.CRITICAL) {
+            tvSeverity.setTextColor(0xFFA63232);
+            tvSeverity.setBackgroundResource(R.drawable.bg_pill_crimson);
+        } else if (event.getSeverity() == ThreatSeverity.HIGH) {
+            tvSeverity.setTextColor(0xFF855A12);
+            tvSeverity.setBackgroundResource(R.drawable.bg_pill_amber);
+        } else {
+            tvSeverity.setTextColor(0xFF386B57);
+            tvSeverity.setBackgroundResource(R.drawable.bg_pill_emerald);
+        }
+        topRow.addView(tvSeverity);
+        card.addView(topRow);
 
-        TextView title = new TextView(activity);
-        title.setText(ev.getTitle());
-        title.setTextSize(14);
-        title.setTextColor(0xFF141414);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
+        TextView tvTitle = new TextView(activity);
+        tvTitle.setText(event.getTitle());
+        tvTitle.setTextSize(senior ? 16 : 14);
+        tvTitle.setTextColor(0xFF141414);
+        tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         tp.topMargin = (int) (6 * density);
-        title.setLayoutParams(tp);
-        item.addView(title);
+        tvTitle.setLayoutParams(tp);
+        card.addView(tvTitle);
 
-        TextView sub = new TextView(activity);
-        sub.setText(ev.getSummary());
-        sub.setTextSize(12);
-        sub.setTextColor(0xFF666666);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        sp.topMargin = (int) (2 * density);
-        sub.setLayoutParams(sp);
-        item.addView(sub);
+        TextView tvDesc = new TextView(activity);
+        tvDesc.setText(event.getSummary());
+        tvDesc.setTextSize(senior ? 14 : 12);
+        tvDesc.setTextColor(0xFF666666);
+        tvDesc.setMaxLines(2);
+        LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dp.topMargin = (int) (4 * density);
+        tvDesc.setLayoutParams(dp);
+        card.addView(tvDesc);
 
-        return item;
+        return card;
     }
 
-    private void showProfilePickerDialog() {
-        String[] profiles = {
-                "Aarav (Teen • 14y) — Sideloads & Social Monitor",
-                "Ananya (Child • 9y) — Strict Camera & Grooming Blocker",
-                "Dadaji (Senior • 72y) — Senior Mode & Banking Defense"
-        };
-
-        new AlertDialog.Builder(activity)
-                .setTitle("Select Family Protection Profile")
-                .setItems(profiles, (dialog, which) -> {
-                    if (which == 0) AppState.get().setCurrentProfile(ChildProfile.AARAV);
-                    else if (which == 1) AppState.get().setCurrentProfile(ChildProfile.ANANYA);
-                    else AppState.get().setCurrentProfile(ChildProfile.DADAJI);
-                    render();
-                    Toast.makeText(activity, "Switched to: " + AppState.get().getCurrentProfile().getName(), Toast.LENGTH_SHORT).show();
-                })
-                .show();
-    }
-
-    private void testSyntheticApk(boolean isTrojan) {
-        byte[] apkBytes;
-        String name;
-
-        if (isTrojan) {
-            name = "QuickBank_Update_Trojan.apk";
-            apkBytes = createSyntheticApk(
-                    "com.fake.quickbank",
-                    "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.fake.quickbank\">\n" +
-                    "    <uses-permission android:name=\"android.permission.SYSTEM_ALERT_WINDOW\" />\n" +
-                    "    <uses-permission android:name=\"android.permission.INTERNET\" />\n" +
-                    "    <application>\n" +
-                    "        <service android:name=\".ATS\" android:permission=\"android.permission.BIND_ACCESSIBILITY_SERVICE\" />\n" +
-                    "    </application>\n" +
-                    "</manifest>",
-                    true
-            );
-        } else {
-            name = "CleanCalculator.apk";
-            apkBytes = createSyntheticApk(
-                    "com.simple.calculator",
-                    "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"com.simple.calculator\">\n" +
-                    "    <application>\n" +
-                    "        <activity android:name=\".Main\">\n" +
-                    "            <intent-filter>\n" +
-                    "                <action android:name=\"android.intent.action.MAIN\" />\n" +
-                    "                <category android:name=\"android.intent.category.LAUNCHER\" />\n" +
-                    "            </intent-filter>\n" +
-                    "        </activity>\n" +
-                    "    </application>\n" +
-                    "</manifest>",
-                    false
-            );
-        }
-
-        ApkAnalysisReport report = AppState.get().getApkEngine().analyzeApk(name, new ByteArrayInputStream(apkBytes), apkBytes.length);
-
-        ActivityEvent event = new ActivityEvent(
-                "evt-" + System.currentTimeMillis(),
-                new Date(),
-                ActivityEvent.EventCategory.APK,
-                report.getVerdict() == ScanVerdict.KNOWN_MALICIOUS ? ThreatSeverity.CRITICAL : ThreatSeverity.INFO,
-                (report.getVerdict() == ScanVerdict.KNOWN_MALICIOUS ? "🚨 Trojan Blocked: " : "✅ Clean APK Verified: ") + name,
-                report.getPlainLanguageExplanation(),
-                List.of(
-                        "Verdict: " + report.getVerdict().getDisplayName(),
-                        "Indicators Count: " + report.getIndicators().size(),
-                        "SHA256: " + report.getSha256Checksum()
-                ),
-                report.canSafelyProceedWithInstall() ? "Proceed with Install" : "Quarantine & Delete"
-        );
-
-        AppState.get().addActivityEvent(event);
-        if (isTrojan) {
-            AppState.get().setSafetyScore(Math.max(70, AppState.get().getSafetyScore() - 8));
-        } else {
-            AppState.get().setSafetyScore(Math.min(100, AppState.get().getSafetyScore() + 2));
-        }
-
-        render();
-        DetailSheetDialog.showEventDetails(activity, event);
-    }
-
-    private void testPhishingLink() {
-        String testUrl = "http://phishing-sbi-portal.top/kyc-update";
-        var result = AppState.get().getPhishingScanner().scanUrl(testUrl);
-
-        ActivityEvent event = new ActivityEvent(
-                "evt-" + System.currentTimeMillis(),
-                new Date(),
-                ActivityEvent.EventCategory.PHISHING,
-                result.severity,
-                "🛑 Phishing Domain Blocked: " + result.domain,
-                result.plainAdvice,
-                result.warningReasons,
-                "Block Destination & Report"
-        );
-
-        AppState.get().addActivityEvent(event);
-        AppState.get().setSafetyScore(Math.max(65, AppState.get().getSafetyScore() - 5));
-        render();
-        DetailSheetDialog.showEventDetails(activity, event);
-    }
-
-    private void dial1930() {
+    private void dialHelpline() {
         try {
             Intent callIntent = new Intent(Intent.ACTION_DIAL);
             callIntent.setData(Uri.parse("tel:1930"));
             activity.startActivity(callIntent);
         } catch (Exception e) {
-            Toast.makeText(activity, "Opening Dialer for 1930 Helpline...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "Dialer unavailable. Dial 1930 directly.", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private byte[] createSyntheticApk(String pkg, String xml, boolean trojan) {
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ZipOutputStream zos = new ZipOutputStream(baos);
-            zos.putNextEntry(new ZipEntry("AndroidManifest.xml"));
-            zos.write(xml.getBytes(StandardCharsets.UTF_8));
-            zos.closeEntry();
-
-            zos.putNextEntry(new ZipEntry("classes.dex"));
-            byte[] dex = new byte[256];
-            dex[0] = 'd'; dex[1] = 'e'; dex[2] = 'x'; dex[3] = '\n';
-            dex[4] = '0'; dex[5] = '3'; dex[6] = '5'; dex[7] = 0;
-            if (trojan) {
-                byte[] sig = "findAccessibilityNodeInfosByViewId".getBytes(StandardCharsets.UTF_8);
-                System.arraycopy(sig, 0, dex, 120, sig.length);
-            }
-            zos.write(dex);
-            zos.closeEntry();
-            zos.close();
-            return baos.toByteArray();
-        } catch (Exception e) {
-            return new byte[0];
+    private void showProfilePickerDialog() {
+        ChildProfile[] profiles = ChildProfile.values();
+        String[] names = new String[profiles.length];
+        for (int i = 0; i < profiles.length; i++) {
+            names[i] = profiles[i].getName() + " (" + profiles[i].getRoleTitle() + ")";
         }
+
+        new AlertDialog.Builder(activity)
+                .setTitle("Select Active Safety Profile")
+                .setItems(names, (dialog, which) -> {
+                    ChildProfile selected = profiles[which];
+                    AppState.get().setCurrentProfile(selected);
+                    render();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 }

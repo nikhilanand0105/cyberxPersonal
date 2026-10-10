@@ -2,10 +2,10 @@ package dev.saathi.personal.ui.model;
 
 public enum NavigationTab {
     HOME("Home"),
-    INSIGHTS("Insights"),
+    SCAN("Scan"),
     ACTIVITY("Activity"),
-    ASSISTANT("Assistant"),
-    GUARDIAN("Guardian");
+    FAMILY("Family"),
+    SETTINGS("Settings");
 
     private final String label;
 

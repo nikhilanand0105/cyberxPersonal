@@ -22,14 +22,14 @@ import dev.saathi.model.ScanVerdict;
 import dev.saathi.model.ThreatSeverity;
 import dev.saathi.personal.R;
 import dev.saathi.personal.ui.components.DetailSheetDialog;
-import dev.saathi.personal.ui.components.OnboardingOverlay;
 import dev.saathi.personal.ui.model.ActivityEvent;
 import dev.saathi.personal.ui.model.NavigationTab;
 import dev.saathi.personal.ui.screens.ActivityScreenController;
 import dev.saathi.personal.ui.screens.AssistantScreenController;
-import dev.saathi.personal.ui.screens.GuardianScreenController;
+import dev.saathi.personal.ui.screens.FamilyScreenController;
 import dev.saathi.personal.ui.screens.HomeScreenController;
-import dev.saathi.personal.ui.screens.InsightsScreenController;
+import dev.saathi.personal.ui.screens.ScanScreenController;
+import dev.saathi.personal.ui.screens.SettingsScreenController;
 import dev.saathi.personal.ui.state.AppState;
 
 import java.io.InputStream;
@@ -41,31 +41,33 @@ import java.util.List;
 public class MainActivity extends Activity {
 
     private FrameLayout screenContainer;
+    private FrameLayout modalContainer;
     private FrameLayout onboardingContainer;
 
     private LinearLayout navItemHome;
-    private LinearLayout navItemInsights;
+    private LinearLayout navItemScan;
     private LinearLayout navItemActivity;
-    private LinearLayout navItemAssistant;
-    private LinearLayout navItemGuardian;
+    private LinearLayout navItemFamily;
+    private LinearLayout navItemSettings;
 
     private ImageView ivNavHome;
-    private ImageView ivNavInsights;
+    private ImageView ivNavScan;
     private ImageView ivNavActivity;
-    private ImageView ivNavAssistant;
-    private ImageView ivNavGuardian;
+    private ImageView ivNavFamily;
+    private ImageView ivNavSettings;
 
     private TextView tvNavHome;
-    private TextView tvNavInsights;
+    private TextView tvNavScan;
     private TextView tvNavActivity;
-    private TextView tvNavAssistant;
-    private TextView tvNavGuardian;
+    private TextView tvNavFamily;
+    private TextView tvNavSettings;
 
     private HomeScreenController homeController;
-    private InsightsScreenController insightsController;
+    private ScanScreenController scanController;
     private ActivityScreenController activityController;
+    private FamilyScreenController familyController;
+    private SettingsScreenController settingsController;
     private AssistantScreenController assistantController;
-    private GuardianScreenController guardianController;
 
     private final Deque<NavigationTab> navigationBackStack = new ArrayDeque<>();
     private Vibrator vibrator;
@@ -94,17 +96,20 @@ public class MainActivity extends Activity {
 
         vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
+        // Initialize persistent preferences in AppState
+        AppState.get().initContext(this);
+
         initViews();
         setupScreenControllers();
         setupNavigation();
 
-        // Listen for centralized state changes (e.g. tab switches from other screens)
+        // Listen for centralized state changes
         AppState.get().addListener(this::onAppStateChanged);
 
-        // Check if incoming intent (APK shared from Chrome, WhatsApp, Files)
+        // Check incoming intent (APK shared from Chrome, WhatsApp, Files)
         handleIncomingIntent(getIntent());
 
-        // Check initial tab
+        // Initial tab
         switchTab(NavigationTab.HOME, false);
     }
 
@@ -132,76 +137,102 @@ public class MainActivity extends Activity {
 
     private void initViews() {
         screenContainer = findViewById(R.id.screen_container);
+        modalContainer = findViewById(R.id.modal_container);
         onboardingContainer = findViewById(R.id.onboarding_container);
 
         navItemHome = findViewById(R.id.nav_item_home);
-        navItemInsights = findViewById(R.id.nav_item_insights);
+        navItemScan = findViewById(R.id.nav_item_scan);
         navItemActivity = findViewById(R.id.nav_item_activity);
-        navItemAssistant = findViewById(R.id.nav_item_assistant);
-        navItemGuardian = findViewById(R.id.nav_item_guardian);
+        navItemFamily = findViewById(R.id.nav_item_family);
+        navItemSettings = findViewById(R.id.nav_item_settings);
 
         ivNavHome = findViewById(R.id.iv_nav_home);
-        ivNavInsights = findViewById(R.id.iv_nav_insights);
+        ivNavScan = findViewById(R.id.iv_nav_scan);
         ivNavActivity = findViewById(R.id.iv_nav_activity);
-        ivNavAssistant = findViewById(R.id.iv_nav_assistant);
-        ivNavGuardian = findViewById(R.id.iv_nav_guardian);
+        ivNavFamily = findViewById(R.id.iv_nav_family);
+        ivNavSettings = findViewById(R.id.iv_nav_settings);
 
         tvNavHome = findViewById(R.id.tv_nav_home);
-        tvNavInsights = findViewById(R.id.tv_nav_insights);
+        tvNavScan = findViewById(R.id.tv_nav_scan);
         tvNavActivity = findViewById(R.id.tv_nav_activity);
-        tvNavAssistant = findViewById(R.id.tv_nav_assistant);
-        tvNavGuardian = findViewById(R.id.tv_nav_guardian);
+        tvNavFamily = findViewById(R.id.tv_nav_family);
+        tvNavSettings = findViewById(R.id.tv_nav_settings);
     }
 
     private void setupScreenControllers() {
         homeController = new HomeScreenController(this);
-        insightsController = new InsightsScreenController(this);
+        scanController = new ScanScreenController(this);
         activityController = new ActivityScreenController(this);
+        familyController = new FamilyScreenController(this);
+        settingsController = new SettingsScreenController(this);
         assistantController = new AssistantScreenController(this);
-        guardianController = new GuardianScreenController(this);
 
-        // Add all 5 screens to the container
+        // Add 5 main screens to screenContainer
         screenContainer.addView(homeController.getView());
-        screenContainer.addView(insightsController.getView());
+        screenContainer.addView(scanController.getView());
         screenContainer.addView(activityController.getView());
-        screenContainer.addView(assistantController.getView());
-        screenContainer.addView(guardianController.getView());
+        screenContainer.addView(familyController.getView());
+        screenContainer.addView(settingsController.getView());
+
+        // Contextual assistant container setup
+        assistantController.setCloseCallback(() -> {
+            if (modalContainer != null) {
+                modalContainer.setVisibility(View.GONE);
+                modalContainer.removeAllViews();
+            }
+        });
     }
 
     private void setupNavigation() {
         navItemHome.setOnClickListener(v -> switchTab(NavigationTab.HOME, true));
-        navItemInsights.setOnClickListener(v -> switchTab(NavigationTab.INSIGHTS, true));
+        navItemScan.setOnClickListener(v -> switchTab(NavigationTab.SCAN, true));
         navItemActivity.setOnClickListener(v -> switchTab(NavigationTab.ACTIVITY, true));
-        navItemAssistant.setOnClickListener(v -> switchTab(NavigationTab.ASSISTANT, true));
-        navItemGuardian.setOnClickListener(v -> switchTab(NavigationTab.GUARDIAN, true));
+        navItemFamily.setOnClickListener(v -> switchTab(NavigationTab.FAMILY, true));
+        navItemSettings.setOnClickListener(v -> switchTab(NavigationTab.SETTINGS, true));
     }
 
     public void switchTab(NavigationTab targetTab, boolean addToStack) {
+        // Dismiss modal if open
+        if (modalContainer != null && modalContainer.getVisibility() == View.VISIBLE) {
+            modalContainer.setVisibility(View.GONE);
+            modalContainer.removeAllViews();
+        }
+
         NavigationTab currentTab = AppState.get().getCurrentTab();
         if (addToStack && currentTab != targetTab) {
             navigationBackStack.push(currentTab);
         }
 
         AppState.get().setCurrentTab(targetTab);
-
-        // Trigger subtle tactile haptic feedback
         performHaptic();
 
         // Update Visibility of Screens
         homeController.getView().setVisibility(targetTab == NavigationTab.HOME ? View.VISIBLE : View.GONE);
-        insightsController.getView().setVisibility(targetTab == NavigationTab.INSIGHTS ? View.VISIBLE : View.GONE);
+        scanController.getView().setVisibility(targetTab == NavigationTab.SCAN ? View.VISIBLE : View.GONE);
         activityController.getView().setVisibility(targetTab == NavigationTab.ACTIVITY ? View.VISIBLE : View.GONE);
-        assistantController.getView().setVisibility(targetTab == NavigationTab.ASSISTANT ? View.VISIBLE : View.GONE);
-        guardianController.getView().setVisibility(targetTab == NavigationTab.GUARDIAN ? View.VISIBLE : View.GONE);
+        familyController.getView().setVisibility(targetTab == NavigationTab.FAMILY ? View.VISIBLE : View.GONE);
+        settingsController.getView().setVisibility(targetTab == NavigationTab.SETTINGS ? View.VISIBLE : View.GONE);
 
         // Refresh views
         if (targetTab == NavigationTab.HOME) homeController.render();
+        else if (targetTab == NavigationTab.SCAN) scanController.render();
         else if (targetTab == NavigationTab.ACTIVITY) activityController.render();
-        else if (targetTab == NavigationTab.ASSISTANT) assistantController.render();
-        else if (targetTab == NavigationTab.GUARDIAN) guardianController.render();
+        else if (targetTab == NavigationTab.FAMILY) familyController.render();
+        else if (targetTab == NavigationTab.SETTINGS) settingsController.render();
 
-        // Update Bottom Nav Highlighting
         updateNavHighlight(targetTab);
+    }
+
+    public void openContextualAssistant(String prompt) {
+        if (modalContainer != null) {
+            modalContainer.removeAllViews();
+            modalContainer.addView(assistantController.getView());
+            modalContainer.setVisibility(View.VISIBLE);
+            assistantController.render();
+            if (prompt != null && !prompt.isBlank()) {
+                assistantController.promptAssistant(prompt);
+            }
+        }
     }
 
     private void updateNavHighlight(NavigationTab tab) {
@@ -212,21 +243,21 @@ public class MainActivity extends Activity {
         tvNavHome.setTextColor(tab == NavigationTab.HOME ? activeColor : inactiveColor);
         tvNavHome.setTypeface(null, tab == NavigationTab.HOME ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
 
-        ivNavInsights.setColorFilter(tab == NavigationTab.INSIGHTS ? activeColor : inactiveColor);
-        tvNavInsights.setTextColor(tab == NavigationTab.INSIGHTS ? activeColor : inactiveColor);
-        tvNavInsights.setTypeface(null, tab == NavigationTab.INSIGHTS ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        ivNavScan.setColorFilter(tab == NavigationTab.SCAN ? activeColor : inactiveColor);
+        tvNavScan.setTextColor(tab == NavigationTab.SCAN ? activeColor : inactiveColor);
+        tvNavScan.setTypeface(null, tab == NavigationTab.SCAN ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
 
         ivNavActivity.setColorFilter(tab == NavigationTab.ACTIVITY ? activeColor : inactiveColor);
         tvNavActivity.setTextColor(tab == NavigationTab.ACTIVITY ? activeColor : inactiveColor);
         tvNavActivity.setTypeface(null, tab == NavigationTab.ACTIVITY ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
 
-        ivNavAssistant.setColorFilter(tab == NavigationTab.ASSISTANT ? activeColor : inactiveColor);
-        tvNavAssistant.setTextColor(tab == NavigationTab.ASSISTANT ? activeColor : inactiveColor);
-        tvNavAssistant.setTypeface(null, tab == NavigationTab.ASSISTANT ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        ivNavFamily.setColorFilter(tab == NavigationTab.FAMILY ? activeColor : inactiveColor);
+        tvNavFamily.setTextColor(tab == NavigationTab.FAMILY ? activeColor : inactiveColor);
+        tvNavFamily.setTypeface(null, tab == NavigationTab.FAMILY ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
 
-        ivNavGuardian.setColorFilter(tab == NavigationTab.GUARDIAN ? activeColor : inactiveColor);
-        tvNavGuardian.setTextColor(tab == NavigationTab.GUARDIAN ? activeColor : inactiveColor);
-        tvNavGuardian.setTypeface(null, tab == NavigationTab.GUARDIAN ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+        ivNavSettings.setColorFilter(tab == NavigationTab.SETTINGS ? activeColor : inactiveColor);
+        tvNavSettings.setTextColor(tab == NavigationTab.SETTINGS ? activeColor : inactiveColor);
+        tvNavSettings.setTypeface(null, tab == NavigationTab.SETTINGS ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
     }
 
     private void performHaptic() {
@@ -243,19 +274,24 @@ public class MainActivity extends Activity {
 
     private void onAppStateChanged() {
         NavigationTab tab = AppState.get().getCurrentTab();
-        // Check if tab changed externally
         if (screenContainer != null) {
             homeController.getView().setVisibility(tab == NavigationTab.HOME ? View.VISIBLE : View.GONE);
-            insightsController.getView().setVisibility(tab == NavigationTab.INSIGHTS ? View.VISIBLE : View.GONE);
+            scanController.getView().setVisibility(tab == NavigationTab.SCAN ? View.VISIBLE : View.GONE);
             activityController.getView().setVisibility(tab == NavigationTab.ACTIVITY ? View.VISIBLE : View.GONE);
-            assistantController.getView().setVisibility(tab == NavigationTab.ASSISTANT ? View.VISIBLE : View.GONE);
-            guardianController.getView().setVisibility(tab == NavigationTab.GUARDIAN ? View.VISIBLE : View.GONE);
+            familyController.getView().setVisibility(tab == NavigationTab.FAMILY ? View.VISIBLE : View.GONE);
+            settingsController.getView().setVisibility(tab == NavigationTab.SETTINGS ? View.VISIBLE : View.GONE);
             updateNavHighlight(tab);
         }
     }
 
     @Override
     public void onBackPressed() {
+        if (modalContainer != null && modalContainer.getVisibility() == View.VISIBLE) {
+            modalContainer.setVisibility(View.GONE);
+            modalContainer.removeAllViews();
+            return;
+        }
+
         if (!navigationBackStack.isEmpty()) {
             NavigationTab previous = navigationBackStack.pop();
             switchTab(previous, false);

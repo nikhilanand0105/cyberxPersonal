@@ -14,9 +14,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import dev.saathi.engine.ApkInstallHandoffHelper;
 import dev.saathi.model.ThreatSeverity;
 import dev.saathi.personal.R;
+import dev.saathi.personal.ui.MainActivity;
 import dev.saathi.personal.ui.model.ActivityEvent;
 import dev.saathi.personal.ui.state.AppState;
 
@@ -30,6 +30,7 @@ public class DetailSheetDialog {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         float density = context.getResources().getDisplayMetrics().density;
+        boolean senior = AppState.get().isSeniorMode();
 
         ScrollView scrollView = new ScrollView(context);
         scrollView.setLayoutParams(new ViewGroup.LayoutParams(
@@ -58,7 +59,7 @@ public class DetailSheetDialog {
 
         TextView tvCategory = new TextView(context);
         tvCategory.setText(event.getCategory().getDisplayName().toUpperCase(Locale.ROOT));
-        tvCategory.setTextSize(11);
+        tvCategory.setTextSize(senior ? 13 : 11);
         tvCategory.setTextColor(0xFF141414);
         tvCategory.setPadding((int) (10 * density), (int) (4 * density), (int) (10 * density), (int) (4 * density));
         tvCategory.setBackgroundResource(R.drawable.bg_pill_dark);
@@ -72,7 +73,7 @@ public class DetailSheetDialog {
         sevParams.leftMargin = (int) (8 * density);
         tvSeverity.setLayoutParams(sevParams);
         tvSeverity.setText(event.getSeverity().name());
-        tvSeverity.setTextSize(11);
+        tvSeverity.setTextSize(senior ? 13 : 11);
         tvSeverity.setPadding((int) (10 * density), (int) (4 * density), (int) (10 * density), (int) (4 * density));
 
         if (event.getSeverity() == ThreatSeverity.CRITICAL) {
@@ -92,7 +93,7 @@ public class DetailSheetDialog {
         // Title
         TextView tvTitle = new TextView(context);
         tvTitle.setText(event.getTitle());
-        tvTitle.setTextSize(20);
+        tvTitle.setTextSize(senior ? 22 : 20);
         tvTitle.setTextColor(0xFF141414);
         tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
@@ -107,7 +108,7 @@ public class DetailSheetDialog {
         TextView tvTime = new TextView(context);
         SimpleDateFormat sdf = new SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault());
         tvTime.setText("Timestamp: " + sdf.format(event.getTimestamp()) + " • Snapdragon 8 Elite Verified");
-        tvTime.setTextSize(12);
+        tvTime.setTextSize(senior ? 13 : 12);
         tvTime.setTextColor(0xFF888888);
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -131,14 +132,14 @@ public class DetailSheetDialog {
 
         TextView sumLabel = new TextView(context);
         sumLabel.setText("ANALYSIS SUMMARY");
-        sumLabel.setTextSize(11);
+        sumLabel.setTextSize(senior ? 13 : 11);
         sumLabel.setTextColor(0xFF888888);
         sumLabel.setTypeface(null, android.graphics.Typeface.BOLD);
         summaryCard.addView(sumLabel);
 
         TextView sumText = new TextView(context);
         sumText.setText(event.getSummary());
-        sumText.setTextSize(14);
+        sumText.setTextSize(senior ? 16 : 14);
         sumText.setTextColor(0xFF141414);
         sumText.setLineSpacing(0, 1.25f);
         LinearLayout.LayoutParams stParams = new LinearLayout.LayoutParams(
@@ -165,7 +166,7 @@ public class DetailSheetDialog {
 
         TextView evLabel = new TextView(context);
         evLabel.setText("EVIDENCE & REVERSE-ENGINEERING PROOF");
-        evLabel.setTextSize(11);
+        evLabel.setTextSize(senior ? 13 : 11);
         evLabel.setTextColor(0xFF141414);
         evLabel.setTypeface(null, android.graphics.Typeface.BOLD);
         evCard.addView(evLabel);
@@ -173,7 +174,7 @@ public class DetailSheetDialog {
         for (String detail : event.getTechnicalDetails()) {
             TextView detailLine = new TextView(context);
             detailLine.setText("• " + detail);
-            detailLine.setTextSize(12);
+            detailLine.setTextSize(senior ? 14 : 12);
             detailLine.setTextColor(0xFF666666);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -198,7 +199,7 @@ public class DetailSheetDialog {
 
         Button btnPrimaryAction = new Button(context);
         btnPrimaryAction.setText(event.getActionLabel());
-        btnPrimaryAction.setTextSize(14);
+        btnPrimaryAction.setTextSize(senior ? 15 : 14);
         btnPrimaryAction.setTextColor(0xFFFFFFFF);
         btnPrimaryAction.setBackgroundResource(R.drawable.bg_pill_black);
         btnPrimaryAction.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -210,16 +211,37 @@ public class DetailSheetDialog {
         });
         actionsRow.addView(btnPrimaryAction);
 
+        // Ask Assistant about this alert
+        if (context instanceof MainActivity) {
+            Button btnAskAssistant = new Button(context);
+            btnAskAssistant.setText("💬 Ask Copilot About This Alert");
+            btnAskAssistant.setTextSize(senior ? 14 : 13);
+            btnAskAssistant.setTextColor(0xFF141414);
+            btnAskAssistant.setBackgroundResource(R.drawable.bg_pill_dark);
+            btnAskAssistant.setTypeface(null, android.graphics.Typeface.BOLD);
+            LinearLayout.LayoutParams askParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    (int) (44 * density)
+            );
+            askParams.topMargin = (int) (8 * density);
+            btnAskAssistant.setLayoutParams(askParams);
+            btnAskAssistant.setOnClickListener(v -> {
+                dialog.dismiss();
+                ((MainActivity) context).openContextualAssistant("Please explain this alert in simple terms: " + event.getTitle() + " - " + event.getSummary());
+            });
+            actionsRow.addView(btnAskAssistant);
+        }
+
         Button btnDismiss = new Button(context);
         btnDismiss.setText("Close Inspection");
-        btnDismiss.setTextSize(13);
+        btnDismiss.setTextSize(senior ? 14 : 13);
         btnDismiss.setTextColor(0xFF666666);
         btnDismiss.setBackgroundColor(Color.TRANSPARENT);
         LinearLayout.LayoutParams dismissParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 (int) (44 * density)
         );
-        dismissParams.topMargin = (int) (8 * density);
+        dismissParams.topMargin = (int) (6 * density);
         btnDismiss.setLayoutParams(dismissParams);
         btnDismiss.setOnClickListener(v -> dialog.dismiss());
         actionsRow.addView(btnDismiss);
